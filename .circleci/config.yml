@@ -1,0 +1,79 @@
+version: 2.1
+executors:
+  builder:
+    docker:
+      - image: aeternity/builder
+        user: builder
+    resource_class: large
+    working_directory: ~/aeternity
+    environment:
+      OTP_VERSION: 20.3.8
+
+commands:
+  checkout_node:
+    steps:
+      - run:
+          name: Checkout aeternity node repository
+          command: |
+            git clone https://github.com/aeternity/aeternity.git .
+  save_build_cache:
+    steps:
+      - save_cache:
+          key: build-cache-v1-{{ .Revision }}
+          paths:
+            - "_build"
+  restore_build_cache:
+    steps:
+      - restore_cache:
+          keys:
+            - build-cache-v1-{{ .Revision }}
+  fail_notification:
+    steps:
+      - run:
+          name: Send failure notification
+          environment:
+            HOOK_TEMPLATE: |
+              {
+                "text": "CircleCI job **%s** failed on branch **%s** by @%s",
+                "attachments": [
+                  {
+                    "title": "Build Link",
+                    "title_link": "%s",
+                    "color": "#FAD6D6"
+                  }
+                ]
+              }
+          command: |
+            HOOK_DATA=$(printf "$HOOK_TEMPLATE" "${CIRCLE_JOB:?}" "${CIRCLE_BRANCH:?}" "${CIRCLE_USERNAME:-unknown}" "${CIRCLE_BUILD_URL:?}")
+            curl -X POST -H 'Content-Type: application/json' ${ROCKET_HOOK_URL:?} --data "${HOOK_DATA:?}"
+          when: on_fail
+
+jobs:
+  build:
+    executor: builder
+    steps:
+      - checkout_node
+      - run:
+          name: Build
+          command: make KIND=test
+      - save_build_cache
+      # - fail_notification
+  test:
+    executor: builder
+    steps:
+      - checkout_node
+      - run:
+          name: Test
+          command: |
+            epmd -daemon
+            make eunit
+      # - fail_notification
+
+workflows:
+  build_test:
+    jobs:
+      - build:
+          requires: []
+      - test:
+          requires:
+            - build
