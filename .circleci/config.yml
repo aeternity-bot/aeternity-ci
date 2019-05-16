@@ -77,8 +77,6 @@ jobs:
       multiplier:
         description: |
           QuickCheck time multiplier.
-          If max job runtime reached, reduce this testing time multiplier variable (or parallelize job).
-          [Jobs have a maximum runtime of 5 hours.](https://circleci.com/docs/2.0/configuration-reference/#jobs).
         type: integer
         default: 40
     executor: builder
