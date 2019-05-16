@@ -47,6 +47,9 @@ commands:
             EQC_EUNIT_TESTING_TIME_MULTIPLIER: << parameters.multiplier >>
           no_output_timeout: 30m
           command: |
+            # QuickCheck test terget uses git magic to source the dependancy and it needs a user
+            git config --global user.email "ci@aeternity.com"
+            git config --global user.name "Aeternity CI"
             make eqc-lib-test
   fail_notification:
     steps:
