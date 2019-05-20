@@ -22,11 +22,34 @@ commands:
           key: build-cache-v1-{{ .Revision }}
           paths:
             - "_build"
+      - save_cache:
+          key: quickcheck-cache-v1-{{ .Revision }}
+          paths:
+            - "eqc-lib/eqc.zip"
   restore_build_cache:
     steps:
       - restore_cache:
           keys:
             - build-cache-v1-{{ .Revision }}
+            - quickcheck-cache-v1-{{ .Revision }}
+  quickcheck_tests:
+    parameters:
+      multiplier:
+        type: integer
+    steps:
+      - run:
+          name: QuickCheck Registration
+          command: |
+            make eqc-lib-registration && make eqc-lib-start
+      - run:
+          name: QuickCheck Tests
+          environment:
+            EQC_EUNIT_TESTING_TIME_MULTIPLIER: << parameters.multiplier >>
+          command: |
+            # QuickCheck test terget uses git magic to source the dependancy and it needs a user
+            git config --global user.email "ci@aeternity.com"
+            git config --global user.name "Aeternity CI"
+            make eqc-lib-test
   fail_notification:
     steps:
       - run:
@@ -49,31 +72,36 @@ commands:
           when: on_fail
 
 jobs:
-  build:
+  quickcheck_tests:
+    parameters:
+      multiplier:
+        description: |
+          QuickCheck time multiplier.
+        type: integer
+        default: 40
     executor: builder
     steps:
       - checkout_node
-      - run:
-          name: Build
-          command: make KIND=test
+      - restore_build_cache
+      - quickcheck_tests:
+          multiplier: << parameters.multiplier >>
       - save_build_cache
-      # - fail_notification
-  test:
-    executor: builder
-    steps:
-      - checkout_node
-      - run:
-          name: Test
-          command: |
-            epmd -daemon
-            make eunit
-      # - fail_notification
+      - fail_notification
 
 workflows:
-  build_test:
+  fast_quickcheck:
     jobs:
-      - build:
+      - quickcheck_tests:
           requires: []
-      - test:
-          requires:
-            - build
+          multiplier: 4
+
+  property_based_tests:
+    triggers:
+      - schedule:
+          cron: "0 0,12 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - quickcheck_tests
